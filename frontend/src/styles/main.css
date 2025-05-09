@@ -1,0 +1,422 @@
+/**
+ * Main Stylesheet for WebChat
+ * @author WebChat Team
+ * @version 1.0.0
+ */
+
+/* ----- TAILWIND IMPORTS ----- */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* ----- CUSTOM PROPERTIES ----- */
+:root {
+  --primary-color: #3366cc;
+  --primary-color-light: #4a88eb;
+  --primary-color-dark: #254e9e;
+  --secondary-color: #4299e1;
+  --text-color: #333333;
+  --text-color-light: #666666;
+  --bg-color: #f7fafc;
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --border-radius: 0.375rem;
+  --transition-speed: 0.3s;
+}
+
+/* ----- BASE STYLES ----- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+#root {
+  max-width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+/* ----- LAYOUT STYLES ----- */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  background-color: #0084ff;
+  color: white;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logout-button {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.logout-button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.app-container {
+  flex: 1;
+  display: flex;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ----- ANIMATION KEYFRAMES ----- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes typingAnimation {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
+}
+
+/* ----- ANIMATION CLASSES ----- */
+.fade-in {
+  animation: fadeIn var(--transition-speed) ease-in;
+}
+
+.slide-in {
+  animation: slideIn var(--transition-speed) ease-out;
+}
+
+/* ----- UTILITY CLASSES ----- */
+.text-ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* ----- CONNECTION STATUS ----- */
+.connection-status {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  text-align: center;
+  font-weight: 500;
+  z-index: 1000;
+  animation: slideDown 0.3s ease-in-out;
+}
+
+.status-connected {
+  background-color: #10b981;
+  color: white;
+}
+
+.status-connecting,
+.connection-status.connecting {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.connection-status.reconnecting {
+  background-color: #f0ad4e;
+  color: white;
+  animation: pulse 1.5s infinite;
+}
+
+.status-disconnected,
+.status-failed,
+.connection-status.disconnected,
+.connection-status.failed {
+  background-color: #ef4444;
+  color: white;
+}
+
+.connection-status.failed {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* ----- LOADING ----- */
+.loading-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.2rem;
+  color: #666;
+}
+
+/* ----- CHAT COMPONENTS ----- */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow: hidden;
+}
+
+.chat-input {
+  padding-bottom: 1rem;
+}
+
+.no-conversation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* ----- MESSAGE BUBBLES ----- */
+.message-bubble {
+  max-width: 80%;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  margin-bottom: 0.5rem;
+  position: relative;
+  word-break: break-word;
+}
+
+.message-bubble-own {
+  background-color: #0084ff;
+  color: white;
+  border-bottom-right-radius: 0.25rem;
+  align-self: flex-end;
+}
+
+.message-bubble-other {
+  background-color: #f0f0f0;
+  color: #333;
+  border-bottom-left-radius: 0.25rem;
+  align-self: flex-start;
+}
+
+.message-time {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 0.25rem;
+  text-align: right;
+}
+
+.message-status {
+  font-size: 0.7rem;
+  margin-left: 0.5rem;
+}
+
+/* ----- TYPING INDICATOR ----- */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.typing-dots {
+  display: inline-flex;
+  margin-left: 0.5rem;
+}
+
+.typing-dot {
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 50%;
+  background-color: #999;
+  margin-right: 0.25rem;
+  animation: typingAnimation 1.5s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+  margin-right: 0;
+}
+
+/* ----- CONVERSATION LIST ----- */
+.conversation-list {
+  border-right: 1px solid #eaeaea;
+  min-width: 280px;
+  max-width: 350px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.conversation-item {
+  padding: 1rem;
+  border-bottom: 1px solid #f5f5f5;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.conversation-item:hover {
+  background-color: #f9f9f9;
+}
+
+.conversation-item.active {
+  background-color: #e6f7ff;
+  border-left: 3px solid #1890ff;
+}
+
+.conversation-avatar {
+  position: relative;
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #52c41a;
+  border: 2px solid white;
+}
+
+/* ----- AUTH PAGES ----- */
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.auth-container {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-title {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.auth-links {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.auth-links a {
+  color: #0084ff;
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
+/* ----- RESPONSIVE STYLES ----- */
+@media (max-width: 640px) {
+  :root {
+    --font-size-base: 0.875rem;
+  }
+  
+  .connection-status {
+    font-size: 0.75rem;
+    padding: 4px;
+  }
+  
+  .conversation-list {
+    min-width: 240px;
+  }
+  
+  .auth-container {
+    padding: 1.5rem;
+    margin: 0 1rem;
+  }
+}
+
+/* Thêm dòng import này vào đầu file */
+@import './components/animations.css'; 
