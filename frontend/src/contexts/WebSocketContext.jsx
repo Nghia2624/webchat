@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { 
-  updateConnectionStatus, 
-  addIncomingFriendRequest,
-  updateFriendOnlineStatus, 
   addMessage, 
+  setConnectionStatus,
   updateMessageStatus,
-  updateTypingStatus
+  updateTypingStatus,
+  addOnlineUser,
+  removeOnlineUser,
+  incrementUnreadCount
 } from '../store/slices/chatSlice';
+import {
+  addIncomingFriendRequest,
+  updateFriendOnlineStatus
+} from '../store/slices/friendSlice';
 import { debounce, throttle } from '../utils/apiUtils';
 
 // Constants
@@ -63,7 +68,7 @@ const WebSocketProvider = ({ children }) => {
     [socketRef]
   );
   
-  // Handler for WebSocket messages
+  // 1. handleMessage
   const handleMessage = useCallback((event) => {
     try {
       const data = JSON.parse(event.data);
@@ -112,7 +117,94 @@ const WebSocketProvider = ({ children }) => {
     }
   }, [dispatch]);
   
-  // Connect to WebSocket
+  // 2. attemptReconnect
+  const connectRef = useRef();
+  const attemptReconnect = useCallback(() => {
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.warn('Maximum reconnection attempts reached');
+      dispatch(setConnectionStatus('failed'));
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
+    dispatch(setConnectionStatus('reconnecting'));
+    const delay = RECONNECT_INTERVAL * Math.pow(CONNECT_BACKOFF_FACTOR, reconnectAttemptsRef.current);
+    reconnectAttemptsRef.current++;
+    reconnectTimeoutRef.current = setTimeout(() => {
+      if (connectRef.current) connectRef.current();
+    }, delay);
+  }, [dispatch]);
+  
+  // 3. startPingInterval
+  const startPingInterval = useCallback(() => {
+    clearPingInterval();
+    pingIntervalRef.current = setInterval(() => {
+      const timeSinceLastActivity = Date.now() - lastActivityRef.current;
+      if (timeSinceLastActivity > PING_INTERVAL * 2) {
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+          socketRef.current.send(JSON.stringify({ type: 'ping' }));
+        } else {
+          clearPingInterval();
+          setIsConnected(false);
+          dispatch(setConnectionStatus('disconnected'));
+          attemptReconnect();
+        }
+      } else if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, PING_INTERVAL);
+  }, [dispatch, attemptReconnect]);
+  
+  // 4. clearPingInterval
+  const clearPingInterval = useCallback(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+  }, []);
+  
+  // 5. disconnect
+  const disconnect = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
+    clearPingInterval();
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+    setIsConnected(false);
+    dispatch(setConnectionStatus('disconnected'));
+  }, [dispatch, clearPingInterval]);
+  
+  // 6. processPendingMessages
+  const processPendingMessages = useCallback(() => {
+    if (!isConnected || messageQueueRef.current.length === 0) return;
+    while (messageQueueRef.current.length > 0) {
+      const message = messageQueueRef.current.shift();
+      try {
+        socketRef.current?.send(JSON.stringify(message));
+      } catch (error) {
+        console.error('Error processing pending message:', error);
+        messageQueueRef.current.unshift(message);
+        break;
+      }
+    }
+  }, [isConnected]);
+  
+  // 7. sendMessage
+  const sendMessage = useCallback((data) => {
+    if (!isConnected) {
+      messageQueueRef.current.push(data);
+      return;
+    }
+    try {
+      socketRef.current?.send(JSON.stringify(data));
+    } catch (error) {
+      console.error('Error sending message:', error);
+      messageQueueRef.current.push(data);
+    }
+  }, [isConnected]);
+  
+  // 8. connect
   const connect = useCallback(() => {
     // Prevent multiple connection attempts 
     if (isConnecting || socketRef.current?.readyState === WebSocket.CONNECTING) {
@@ -125,14 +217,14 @@ const WebSocketProvider = ({ children }) => {
     }
     
     if (!accessToken) {
-      dispatch(updateConnectionStatus('disconnected'));
+      dispatch(setConnectionStatus('disconnected'));
       setIsConnected(false);
       setIsConnecting(false);
       return;
     }
     
     setIsConnecting(true);
-    dispatch(updateConnectionStatus('connecting'));
+    dispatch(setConnectionStatus('connecting'));
     
     const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:8081/ws'}?token=${accessToken}`;
     
@@ -158,7 +250,7 @@ const WebSocketProvider = ({ children }) => {
         clearTimeout(connectionTimeout);
         setIsConnected(true);
         setIsConnecting(false);
-        dispatch(updateConnectionStatus('connected'));
+        dispatch(setConnectionStatus('connected'));
         reconnectAttemptsRef.current = 0;
         
         // Start ping interval
@@ -175,129 +267,32 @@ const WebSocketProvider = ({ children }) => {
         setIsConnected(false);
         setIsConnecting(false);
         clearPingInterval();
-        dispatch(updateConnectionStatus('disconnected'));
+        dispatch(setConnectionStatus('disconnected'));
         attemptReconnect();
       };
       
       socketRef.current.onerror = (error) => {
         clearTimeout(connectionTimeout);
         console.error('WebSocket error:', error);
-        dispatch(updateConnectionStatus('error'));
+        dispatch(setConnectionStatus('error'));
         socketRef.current?.close();
       };
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
       setIsConnecting(false);
-      dispatch(updateConnectionStatus('error'));
+      dispatch(setConnectionStatus('error'));
       attemptReconnect();
     }
-  }, [accessToken, dispatch, isConnecting, processPendingMessages, handleMessage]);
+  }, [accessToken, dispatch, isConnecting, processPendingMessages, handleMessage, startPingInterval, clearPingInterval, attemptReconnect]);
   
-  // Start ping interval to keep connection alive
-  const startPingInterval = useCallback(() => {
-    clearPingInterval();
-    
-    pingIntervalRef.current = setInterval(() => {
-      // Check if connection is idle for too long
-      const timeSinceLastActivity = Date.now() - lastActivityRef.current;
-      
-      if (timeSinceLastActivity > PING_INTERVAL * 2) {
-        // No activity for a while, check connection
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ type: 'ping' }));
-        } else {
-          // Connection is stale
-          clearPingInterval();
-          setIsConnected(false);
-          dispatch(updateConnectionStatus('disconnected'));
-          attemptReconnect();
-        }
-      } else if (socketRef.current?.readyState === WebSocket.OPEN) {
-        // Regular ping
-        socketRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, PING_INTERVAL);
-  }, [dispatch]);
+  connectRef.current = connect;
   
-  // Clear ping interval
-  const clearPingInterval = useCallback(() => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
+  // Process pending messages when connection is established
+  useEffect(() => {
+    if (isConnected) {
+      processPendingMessages();
     }
-  }, []);
-  
-  // Attempt to reconnect with exponential backoff
-  const attemptReconnect = useCallback(() => {
-    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-      console.warn('Maximum reconnection attempts reached');
-      dispatch(updateConnectionStatus('failed'));
-      reconnectAttemptsRef.current = 0;
-      return;
-    }
-    
-    dispatch(updateConnectionStatus('reconnecting'));
-    
-    const delay = RECONNECT_INTERVAL * Math.pow(CONNECT_BACKOFF_FACTOR, reconnectAttemptsRef.current);
-    reconnectAttemptsRef.current++;
-    
-    reconnectTimeoutRef.current = setTimeout(() => {
-      connect();
-    }, delay);
-  }, [dispatch, connect]);
-  
-  // Process pending messages in the queue
-  const processPendingMessages = useCallback(() => {
-    if (!isConnected || messageQueueRef.current.length === 0) return;
-    
-    const queue = [...messageQueueRef.current];
-    messageQueueRef.current = [];
-    setPendingMessages(0);
-    
-    queue.forEach(item => {
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify(item));
-      } else {
-        // Put back in queue if not connected
-        messageQueueRef.current.push(item);
-        setPendingMessages(prev => prev + 1);
-      }
-    });
-  }, [isConnected]);
-  
-  // Optimized sendMessage with queue
-  const sendMessage = useCallback((data) => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(data));
-      return true;
-    } else {
-      // Queue message for later
-      messageQueueRef.current.push(data);
-      setPendingMessages(prev => prev + 1);
-      
-      // Try to reconnect if needed
-      if (!isConnected && !isConnecting) {
-        connect();
-      }
-      return false;
-    }
-  }, [connect, isConnected, isConnecting]);
-  
-  // Disconnect WebSocket
-  const disconnect = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.close();
-    }
-    
-    clearPingInterval();
-    
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    
-    setIsConnected(false);
-    dispatch(updateConnectionStatus('disconnected'));
-  }, [dispatch, clearPingInterval]);
+  }, [isConnected, processPendingMessages]);
   
   // Connect when token changes or component mounts
   useEffect(() => {

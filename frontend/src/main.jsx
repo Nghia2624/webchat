@@ -16,9 +16,6 @@ import ApiProvider from './contexts/ApiContext'
 import WebSocketProvider from './contexts/WebSocketContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 
-// Import main stylesheet (consolidated CSS)
-import './styles/main.css'
-
 // Thiết lập Content Security Policy
 if (process.env.NODE_ENV === 'production') {
   const meta = document.createElement('meta')

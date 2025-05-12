@@ -14,4 +14,17 @@ export const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'appl
 // UI Configuration
 export const TYPING_DEBOUNCE = 500; // ms
 export const NOTIFICATION_DURATION = 3000; // ms
-export const MAX_MESSAGE_LENGTH = 1000; 
+export const MAX_MESSAGE_LENGTH = 1000;
+
+const config = {
+  APP_NAME: 'Web Chat',
+  VERSION: '1.0.0',
+  DEFAULT_AVATAR: '/images/default-avatar.png',
+  MESSAGE_LIMIT: 50,
+  FRIEND_REQUEST_LIMIT: 20,
+  SEARCH_LIMIT: 10,
+  TOAST_DURATION: 3000,
+  REFRESH_TOKEN_INTERVAL: 14 * 60 * 1000, // 14 minutes
+};
+
+export default config; 

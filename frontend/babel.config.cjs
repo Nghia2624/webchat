@@ -85,7 +85,7 @@ module.exports = {
   env: {
     development: {
       plugins: [
-        'react-refresh/babel',
+        // 'react-refresh/babel', // Đã được Vite tự động thêm, tránh trùng lặp
       ],
     },
     production: {

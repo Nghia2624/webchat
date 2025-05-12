@@ -183,4 +183,156 @@ export const optimizeQuery = (query, complexity = null) => {
   }
   
   return strategy;
+};
+
+/**
+ * Tạo request queue để xử lý tuần tự các requests
+ * @returns {Object} Queue handler
+ */
+export const createRequestQueue = () => {
+  const queue = [];
+  let processing = false;
+  
+  const processQueue = async () => {
+    if (processing || queue.length === 0) return;
+    
+    processing = true;
+    const { request, resolve, reject } = queue.shift();
+    
+    try {
+      const result = await request();
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    } finally {
+      processing = false;
+      processQueue();
+    }
+  };
+  
+  return {
+    add: (request) => {
+      return new Promise((resolve, reject) => {
+        queue.push({ request, resolve, reject });
+        processQueue();
+      });
+    },
+    clear: () => {
+      queue.length = 0;
+    },
+    getLength: () => queue.length
+  };
+};
+
+/**
+ * Tạo rate limiter để giới hạn số lượng requests trong một khoảng thời gian
+ * @param {number} maxRequests - Số lượng requests tối đa
+ * @param {number} timeWindow - Khoảng thời gian (ms)
+ * @returns {Function} Rate limiter function
+ */
+export const createRateLimiter = (maxRequests, timeWindow) => {
+  const requests = [];
+  
+  return () => {
+    const now = Date.now();
+    requests.push(now);
+    
+    // Remove old requests
+    while (requests.length > 0 && requests[0] < now - timeWindow) {
+      requests.shift();
+    }
+    
+    return requests.length <= maxRequests;
+  };
+};
+
+/**
+ * Tạo circuit breaker để ngăn chặn requests khi service gặp vấn đề
+ * @param {Object} options - Cấu hình circuit breaker
+ * @returns {Function} Circuit breaker function
+ */
+export const createCircuitBreaker = (options = {}) => {
+  const {
+    failureThreshold = 5,
+    resetTimeout = 30000,
+    monitorInterval = 1000
+  } = options;
+  
+  let failures = 0;
+  let lastFailureTime = 0;
+  let state = 'CLOSED';
+  
+  const monitor = setInterval(() => {
+    if (state === 'OPEN' && Date.now() - lastFailureTime > resetTimeout) {
+      state = 'HALF-OPEN';
+    }
+  }, monitorInterval);
+  
+  return {
+    execute: async (fn) => {
+      if (state === 'OPEN') {
+        throw new Error('Circuit breaker is OPEN');
+      }
+      
+      try {
+        const result = await fn();
+        if (state === 'HALF-OPEN') {
+          state = 'CLOSED';
+          failures = 0;
+        }
+        return result;
+      } catch (error) {
+        failures++;
+        lastFailureTime = Date.now();
+        
+        if (failures >= failureThreshold) {
+          state = 'OPEN';
+        }
+        
+        throw error;
+      }
+    },
+    getState: () => state,
+    reset: () => {
+      state = 'CLOSED';
+      failures = 0;
+    },
+    destroy: () => {
+      clearInterval(monitor);
+    }
+  };
+};
+
+/**
+ * Tạo request interceptor để xử lý các requests trước khi gửi
+ * @param {Array<Function>} interceptors - Mảng các interceptor functions
+ * @returns {Function} Request handler
+ */
+export const createRequestInterceptor = (interceptors = []) => {
+  return async (request) => {
+    let modifiedRequest = request;
+    
+    for (const interceptor of interceptors) {
+      modifiedRequest = await interceptor(modifiedRequest);
+    }
+    
+    return modifiedRequest;
+  };
+};
+
+/**
+ * Tạo response interceptor để xử lý các responses sau khi nhận
+ * @param {Array<Function>} interceptors - Mảng các interceptor functions
+ * @returns {Function} Response handler
+ */
+export const createResponseInterceptor = (interceptors = []) => {
+  return async (response) => {
+    let modifiedResponse = response;
+    
+    for (const interceptor of interceptors) {
+      modifiedResponse = await interceptor(modifiedResponse);
+    }
+    
+    return modifiedResponse;
+  };
 }; 

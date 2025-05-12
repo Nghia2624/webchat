@@ -1,343 +1,162 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { sendMessage, setTyping } from '../../store/slices/chatSlice';
-// Temporarily removed import for emoji-mart
-// import data from '@emoji-mart/data';
-// import Picker from '@emoji-mart/react';
-import Spinner from '../common/Spinner';
-import { SendIcon, AttachmentIcon, EmojiIcon } from './ChatIcons';
+import { sendMessage } from '../../store/slices/chatSlice';
+import { useWebSocket } from '../../contexts/WebSocketContext';
+import AudioRecorder from './AudioRecorder';
+import EmojiPicker from './EmojiPicker';
+import FileUploader from './FileUploader';
+import { SendIcon, EmojiIcon, AttachmentIcon } from '../icons';
 
-// Basic emoji array for temporary use
-const basicEmojis = ['😀', '😊', '🙂', '😍', '😎', '🤔', '👍', '❤️', '👋', '🎉'];
-
-const MessageInput = ({ 
-  onSendMessage, 
-  conversationId, 
-  placeholder = "Nhập tin nhắn...",
-  replyingTo = null,
-  onCancelReply = () => {},
-  disabled = false
-}) => {
+const MessageInput = React.memo(({ chatId, onTyping }) => {
   const dispatch = useDispatch();
+  const { sendMessage: sendWebSocketMessage } = useWebSocket();
+  const currentUser = useSelector(state => state.auth.user);
+  
   const [message, setMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [attachment, setAttachment] = useState(null);
-  const [recordingAudio, setRecordingAudio] = useState(false);
-  const [audioRecorder, setAudioRecorder] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
-  const [recordingTime, setRecordingTime] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
   
-  const timerRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const textareaRef = useRef(null);
-  const emojiPickerRef = useRef(null);
-  
-  const sending = useSelector((state) => state.chat.sendingMessages[conversationId]);
-  const connectionStatus = useSelector((state) => state.chat.connectionStatus);
-  
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [conversationId, replyingTo]);
+  const typingTimeoutRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // Tự động mở rộng textarea khi nhập nhiều dòng
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '40px';
-      const scrollHeight = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = `${Math.min(scrollHeight, 120)}px`;
-    }
-  }, [message]);
-  
-  // Close emoji picker when clicking outside
-  useEffect(() => {
-    if (!showEmojiPicker) return;
-    
-    const handleClickOutside = (event) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showEmojiPicker]);
-  
-  // Cleanup timer when component unmounts
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
       }
     };
   }, []);
-  
-  // Start recording audio
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks = [];
-      
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunks.push(e.data);
-          setAudioChunks([...chunks]);
-        }
-      };
-      
-      recorder.start(1000);
-      setAudioRecorder(recorder);
-      setRecordingAudio(true);
-      setRecordingTime(0);
-      
-      // Start timer
-      timerRef.current = setInterval(() => {
-        setRecordingTime((prevTime) => prevTime + 1);
-      }, 1000);
-    } catch (error) {
-      console.error('Error starting audio recording:', error);
-      alert('Không thể truy cập microphone. Hãy kiểm tra quyền truy cập và thử lại.');
-    }
-  };
-  
-  // Stop recording audio
-  const stopRecording = () => {
-    if (audioRecorder) {
-      audioRecorder.stop();
-      audioRecorder.stream.getTracks().forEach(track => track.stop());
-      
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      
-      // Convert audio chunks to file
-      setTimeout(() => {
-        if (audioChunks.length > 0) {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          const audioFile = new File([audioBlob], `audio_message_${Date.now()}.webm`, { 
-            type: 'audio/webm' 
-          });
-          
-          setAttachment({
-            file: audioFile,
-            preview: URL.createObjectURL(audioBlob),
-            type: 'audio',
-            name: 'Tin nhắn thoại'
-          });
-        }
-        
-        setAudioRecorder(null);
-        setRecordingAudio(false);
-      }, 500);
-    }
-  };
-  
-  // Cancel recording audio
-  const cancelRecording = () => {
-    if (audioRecorder) {
-      audioRecorder.stop();
-      audioRecorder.stream.getTracks().forEach(track => track.stop());
-      
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      
-      setAudioRecorder(null);
-      setRecordingAudio(false);
-      setAudioChunks([]);
-    }
-  };
-  
-  // Format recording time
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-  
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
 
-  const handleSendMessage = () => {
-    if ((!message.trim() && !attachment) || disabled) return;
-    
-    onSendMessage({
+  const handleTyping = useCallback(() => {
+    if (!isTyping) {
+      setIsTyping(true);
+      onTyping(true);
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+      onTyping(false);
+    }, 1000);
+  }, [isTyping, onTyping]);
+
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    if (!message.trim() && !attachment) return;
+
+    const messageData = {
+      chatId,
       content: message.trim(),
-      attachment: attachment,
-      replyTo: replyingTo ? replyingTo.id : null
-    });
-    
-    setMessage('');
-    setAttachment(null);
-    if (replyingTo) {
-      onCancelReply();
-    }
-  };
+      type: attachment ? 'file' : 'text',
+      file: attachment
+    };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    // Chỉ cho phép file dưới 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File quá lớn. Vui lòng chọn file dưới 10MB.');
-      return;
+    try {
+      setIsUploading(true);
+      await dispatch(sendMessage(messageData)).unwrap();
+      sendWebSocketMessage({
+        type: 'message',
+        data: {
+          ...messageData,
+          sender: currentUser.id,
+          timestamp: new Date().toISOString()
+        }
+      });
+      setMessage('');
+      setAttachment(null);
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsUploading(false);
     }
-    
-    setAttachment({
-      file,
-      type: file.type,
-      name: file.name,
-      size: file.size,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-    });
-  };
+  }, [chatId, message, attachment, dispatch, sendWebSocketMessage, currentUser.id]);
 
-  const removeAttachment = () => {
-    if (attachment?.preview) {
-      URL.revokeObjectURL(attachment.preview);
-    }
-    setAttachment(null);
-  };
-
-  const handleEmojiSelect = (emoji) => {
-    setMessage(prev => prev + emoji.native);
+  const handleEmojiSelect = useCallback((emoji) => {
+    setMessage(prev => prev + emoji);
     setShowEmojiPicker(false);
-  };
+    inputRef.current?.focus();
+  }, []);
 
-  // Check if send button should be disabled
-  const isSendDisabled = 
-    (message.trim() === '' && !attachment) || 
-    sending || 
-    isUploading || 
-    connectionStatus !== 'connected';
-  
+  const handleFileSelect = useCallback((file) => {
+    setAttachment(file);
+  }, []);
+
+  const handleCancelFile = useCallback(() => {
+    setAttachment(null);
+  }, []);
+
   return (
-    <div className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 p-3">
-      {/* Reply Preview */}
-      {replyingTo && (
-        <div className="flex items-start mb-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
-          <div className="flex-1">
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Trả lời {replyingTo.sender.name}
-            </div>
-            <div className="text-sm truncate">
-              {replyingTo.content}
-            </div>
-          </div>
-          <button 
-            onClick={onCancelReply}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-      
-      {/* Attachment Preview */}
+    <form onSubmit={handleSubmit} className="border-t p-4">
       {attachment && (
-        <div className="mb-2 flex items-center bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
-          {attachment.preview ? (
-            <img src={attachment.preview} alt="Preview" className="h-16 w-16 object-cover rounded" />
-          ) : (
-            <div className="text-2xl mr-2">📎</div>
-          )}
-          <div className="flex-1 mx-2 overflow-hidden">
-            <div className="truncate font-medium">{attachment.name}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              {(attachment.size / 1024).toFixed(2)} KB
-            </div>
+        <div className="mb-2 p-2 bg-gray-50 rounded-lg flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            {attachment.preview ? (
+              <img src={attachment.preview} alt="Preview" className="w-10 h-10 object-cover rounded" />
+            ) : (
+              <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            )}
+            <span className="text-sm text-gray-600 truncate max-w-xs">{attachment.name}</span>
           </div>
-          <button 
-            onClick={removeAttachment}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          <button
+            type="button"
+            onClick={handleCancelFile}
+            className="text-gray-500 hover:text-gray-700"
           >
-            ✕
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       )}
       
-      {/* Input Area */}
-      <div className="flex items-end space-x-2">
-        <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full flex items-end overflow-hidden pr-2">
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent border-none outline-none py-2 px-4 text-gray-700 dark:text-white resize-none min-h-[40px]"
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-          />
-          
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary transition-colors"
-            disabled={disabled}
-            title="Đính kèm file"
-          >
-            <AttachmentIcon className="w-5 h-5" />
-          </button>
-          
-          <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="p-2 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary transition-colors"
-            disabled={disabled}
-            title="Chọn emoji"
-          >
-            <EmojiIcon className="w-5 h-5" />
-          </button>
-          
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept="image/*,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          />
-        </div>
-        
+      <div className="flex items-center space-x-2">
         <button
-          onClick={handleSendMessage}
-          disabled={(!message.trim() && !attachment) || disabled}
-          className={`rounded-full p-2.5 ${
-            (!message.trim() && !attachment) || disabled
-              ? 'bg-gray-300 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-primary text-white shadow-sm hover:bg-primary-dark transition-colors'
-          }`}
-          title="Gửi tin nhắn"
+          type="button"
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          className="p-2 text-gray-500 hover:bg-gray-50 rounded-full"
+        >
+          <EmojiIcon className="w-5 h-5" />
+        </button>
+
+        <FileUploader onFileSelect={handleFileSelect} onCancel={handleCancelFile} />
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={message}
+          onChange={(e) => {
+            setMessage(e.target.value);
+            handleTyping();
+          }}
+          placeholder="Nhập tin nhắn..."
+          className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+
+        <button
+          type="submit"
+          disabled={(!message.trim() && !attachment) || isUploading}
+          className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
         >
           <SendIcon className="w-5 h-5" />
         </button>
       </div>
-      
-      {/* Emoji Picker (placeholder) */}
+
       {showEmojiPicker && (
-        <div className="absolute bottom-16 right-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-3 border dark:border-gray-700">
-          <div className="grid grid-cols-8 gap-2">
-            {['😀', '😂', '😍', '🥰', '😘', '🤔', '😎', '😢', 
-              '😡', '👍', '👎', '❤️', '🔥', '🎉', '👋', '🙏'].map(emoji => (
-              <button 
-                key={emoji}
-                className="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
-                onClick={() => handleEmojiSelect({ native: emoji })}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+        <div className="absolute bottom-20 left-4">
+          <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
         </div>
       )}
-    </div>
+    </form>
   );
-};
+});
+
+MessageInput.displayName = 'MessageInput';
 
 export default MessageInput;

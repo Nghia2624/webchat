@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { markMessageAsRead, batchMarkMessagesAsRead } from '../store/slices/chatSlice';
-import websocketService from '../services/websocket';
+import { useWebSocket } from '../contexts/WebSocketContext';
 
 /**
  * Hook to efficiently handle marking messages as read
@@ -9,6 +9,7 @@ import websocketService from '../services/websocket';
  */
 export const useReadMessages = () => {
   const dispatch = useDispatch();
+  const { sendMessage } = useWebSocket();
   const { activeConversation, messages } = useSelector((state) => state.chat);
   const currentUser = useSelector((state) => state.auth.user);
   const pendingReads = useRef(new Set());
@@ -33,18 +34,24 @@ export const useReadMessages = () => {
     // Dispatch to update local state immediately
     dispatch(batchMarkMessagesAsRead(messageIds));
     
-    // Send to server via websocket and API
+    // Send to server via websocket
     if (messageIds.length === 1) {
-      // Single message, use standard API
-      websocketService.sendReadStatus(messageIds[0]);
+      // Single message
+      sendMessage({
+        type: 'read_status',
+        payload: { messageId: messageIds[0] }
+      });
     } else {
-      // Multiple messages, use batch API
-      websocketService.sendBatchReadStatus(messageIds);
+      // Multiple messages
+      sendMessage({
+        type: 'batch_read_status',
+        payload: { messageIds }
+      });
     }
     
     // Clear the set after processing
     pendingReads.current.clear();
-  }, [dispatch]);
+  }, [dispatch, sendMessage]);
 
   // Schedule batch processing
   const scheduleBatchProcess = useCallback(() => {

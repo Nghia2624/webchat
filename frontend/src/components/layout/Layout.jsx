@@ -2,27 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../../store/slices/authSlice';
-import websocketService from '../../services/websocket';
+import { useWebSocket } from '../../contexts/WebSocketContext';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const Layout = ({ children }) => {
   const { user, accessToken } = useSelector((state) => state.auth);
   const { connectionStatus } = useSelector((state) => state.chat);
+  const { disconnect } = useWebSocket();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-
-  // Kết nối WebSocket khi component mount
-  useEffect(() => {
-    if (user && accessToken) {
-      websocketService.connect(accessToken);
-    }
-
-    return () => {
-      websocketService.disconnect();
-    };
-  }, [accessToken, user]);
 
   // Hiển thị thông báo khi trạng thái kết nối thay đổi
   useEffect(() => {
@@ -46,7 +36,7 @@ const Layout = ({ children }) => {
 
   // Xử lý đăng xuất
   const handleLogout = () => {
-    websocketService.disconnect();
+    disconnect();
     dispatch(logout());
     navigate('/login');
     toast.info('Đã đăng xuất khỏi hệ thống', {

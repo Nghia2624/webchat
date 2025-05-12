@@ -15,7 +15,6 @@ export default defineConfig(({ mode }) => {
       react({
         babel: {
           plugins: [
-            mode === 'development' && 'react-refresh/babel',
             mode === 'production' && '@babel/plugin-transform-react-constant-elements',
             mode === 'production' && '@babel/plugin-transform-react-inline-elements',
             mode === 'production' && 'babel-plugin-transform-react-remove-prop-types',
@@ -95,7 +94,7 @@ export default defineConfig(({ mode }) => {
     
     // Cấu hình CSS
     css: {
-      postcss: path.resolve('./postcss.config.cjs'),
+      postcss: './postcss.config.js',
       devSourcemap: true,
       modules: {
         localsConvention: 'camelCase',
@@ -212,7 +211,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     esbuild: {
-      jsxInject: `import React from 'react'`,
       jsxFactory: 'React.createElement',
       jsxFragment: 'React.Fragment',
       target: 'esnext',

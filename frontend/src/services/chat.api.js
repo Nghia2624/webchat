@@ -30,6 +30,59 @@ const chatAPI = {
       messageIds
     });
     return response.data;
+  },
+
+  sendMessage: async (conversationId, content, attachments = []) => {
+    const formData = new FormData();
+    formData.append('content', content);
+    attachments.forEach(file => {
+      formData.append('attachments', file);
+    });
+
+    const response = await axios.post(
+      `${API_URL}/conversations/${conversationId}/messages`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    );
+    return response.data;
+  },
+
+  deleteMessage: async (messageId) => {
+    const response = await axios.delete(`${API_URL}/messages/${messageId}`);
+    return response.data;
+  },
+
+  updateMessage: async (messageId, content) => {
+    const response = await axios.put(`${API_URL}/messages/${messageId}`, { content });
+    return response.data;
+  },
+
+  addParticipants: async (conversationId, participantIds) => {
+    const response = await axios.post(`${API_URL}/conversations/${conversationId}/participants`, {
+      participantIds
+    });
+    return response.data;
+  },
+
+  removeParticipant: async (conversationId, participantId) => {
+    const response = await axios.delete(
+      `${API_URL}/conversations/${conversationId}/participants/${participantId}`
+    );
+    return response.data;
+  },
+
+  updateConversation: async (conversationId, data) => {
+    const response = await axios.put(`${API_URL}/conversations/${conversationId}`, data);
+    return response.data;
+  },
+
+  deleteConversation: async (conversationId) => {
+    const response = await axios.delete(`${API_URL}/conversations/${conversationId}`);
+    return response.data;
   }
 };
 
